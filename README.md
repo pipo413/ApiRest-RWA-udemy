@@ -608,3 +608,297 @@ En este ejemplo, OrderDTO es un DTO que encapsula datos relacionados con una ord
     ```
 
 * Nota: ```request``` es una convención para referirse a los datos de la solicitud HTTP y facilita la comprensión del propósito del parámetro en el contexto de un controlador de API.
+
+1. **private readonly ApplicationDbContext dbContext**: Se crea un campo privado dbContext en el controlador. Este campo se utiliza para almacenar una instancia de la clase ApplicationDbContext, que es la clase que representa el contexto de la base de datos. El modificador readonly indica que este campo solo puede asignarse en el momento de la inicialización o en el constructor.
+
+2. Constructor public **CategoriesController(ApplicationDbContext dbContext):** Se crea un constructor para el controlador que toma una instancia de **ApplicationDbContext** como parámetro. Este constructor es parte del patrón de inyección de dependencias. Cuando el controlador se crea, el marco de trabajo de ASP.NET Core inyectará automáticamente una instancia de **ApplicationDbContext** en este constructor.
+
+3. **this.dbContext = dbContext;**: En el constructor, la instancia de **ApplicationDbContext** inyectada se asigna al campo privado **dbContext**. De esta manera, el controlador ahora tiene acceso al contexto de la base de datos durante su ciclo de vida.
+
+4. **[HttpPost]:** Este atributo en un método indica que el método responde a las solicitudes HTTP de tipo POST.
+
+La inyección de dependencias es un patrón de diseño en el que los componentes de una aplicación no crean directamente las instancias de sus dependencias, sino que las reciben como parámetros. En este caso, el controlador de categorías necesita interactuar con la base de datos, y la inyección de dependencias permite proporcionar el contexto de la base de datos al controlador sin que el controlador tenga que crear una instancia directamente.
+
+En resumen, este código facilita la gestión de dependencias y permite que el controlador de categorías acceda al contexto de la base de datos sin acoplar fuertemente el controlador a una implementación específica del contexto de la base de datos. Esto mejora la modularidad y facilita las pruebas unitarias al permitir la sustitución fácil de implementaciones durante las pruebas.
+
+quedando: 
+
+```csharp
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using CodePulse_API.Models.DTO;
+using CodePulse_API.Models.Domain;
+using Microsoft.Identity.Client;
+using CodePulse_API.Data;
+
+namespace CodePulse_API.Controllers
+{
+    //https://localhost:xxxx/api/categories
+    [Route("api/[controller]")]
+    [ApiController]
+    public class CategoriesController : ControllerBase
+    {
+        //3) Creamos un private fiel 
+        private readonly ApplicationDbContext dbContext;
+
+
+        //2) Creamos un constructor con la inyección del dbcontenxt
+        public CategoriesController(ApplicationDbContext dbContext)
+        {
+            this.dbContext = dbContext;
+        }
+        [HttpPost]
+        public async Task<IActionResult> CreateCategory(CreateCategoryRequestDTO request)
+        {
+
+
+            // 1)Aca hacemos un MAP a DTO y lo pasamos domain model
+
+            var category = new Category
+            {
+                Name = request.Name,
+                UrlHandle = request.UrlHandle,
+            };
+            
+            //4)
+            await dbContext.Categories.AddAsync(category);
+            await dbContext.SaveChangesAsync();
+
+            // domain model to DTO
+
+            // 5) Creamos dentro de DTO la CategotyDTO con los elementos que nos va a requerir el usuario (Angular) luego 
+
+            var response = new CategoryDTO
+            {
+                Id = category.Id,
+                Name = category.Name,
+                UrlHandle = category.UrlHandle,
+            };
+
+            return Ok(response);
+
+        }
+    }
+}
+
+```
+
+* Podemos reliazar una prueba dando play, luego se abrirá el swagger para poder hacer pruebas de peticiones.
+
+## **Repository Pattern**
+
+El Repository Pattern es un patrón de diseño comúnmente utilizado en el desarrollo de software para abstraer la capa de acceso a datos y proporcionar una interfaz más simple y coherente para trabajar con datos de la aplicación. A continuación, te proporcionaré una explicación del Repository Pattern en el contexto de .NET junto con un ejemplo sencillo relacionado con un restaurante.
+
+1. Puntos Claves del Repository Pattern:
+
+    **Abstracción del Acceso a Datos**: El Repository Pattern define interfaces para acceder a datos y proporciona implementaciones concretas para interactuar con la capa de almacenamiento de datos, como una base de datos.
+
+    **Separación de Responsabilidades**: El patrón promueve la separación de responsabilidades al aislar la lógica de acceso a datos del resto de la aplicación. Esto facilita el mantenimiento y la prueba del código.
+
+    **Interfaz Unificada**: Ofrece una interfaz de programación unificada para trabajar con datos, independientemente de la fuente de datos subyacente. Esto facilita la sustitución de implementaciones y cambia la fuente de datos sin afectar el resto de la aplicación.
+
+    **Soporte para Operaciones CRUD**: El Repository Pattern generalmente define operaciones básicas como Create, Read, Update y Delete (CRUD) para manipular datos.
+
+    **Posibilidad de Implementaciones Específicas**: Permite tener implementaciones específicas para diferentes fuentes de datos, como bases de datos SQL, almacenamiento en memoria o servicios web.
+
+#### Ejemplo con un restaurante:
+
+1. Interfaz del Repositorio (IMenuRepository):
+
+```csharp
+Copy code
+public interface IMenuRepository
+{
+    Menu GetById(int id);
+    IEnumerable<Menu> GetAll();
+    void Add(Menu menu);
+    void Update(Menu menu);
+    void Delete(int id);
+}
+```
+
+En esta interfaz, hemos definido las operaciones básicas que queremos realizar en el repositorio de menús. GetById obtiene un menú por su identificador, GetAll obtiene todos los menús, Add agrega un menú, Update actualiza un menú y Delete elimina un menú por su identificador.
+
+2. Implementación del Repositorio (MenuRepository):
+
+```csharp
+Copy code
+public class MenuRepository : IMenuRepository
+{
+    private readonly ApplicationDbContext dbContext;
+
+    public MenuRepository(ApplicationDbContext dbContext)
+    {
+        this.dbContext = dbContext;
+    }
+
+    public Menu GetById(int id)
+    {
+        return dbContext.Menus.Find(id);
+    }
+
+    public IEnumerable<Menu> GetAll()
+    {
+        return dbContext.Menus.ToList();
+    }
+
+    public void Add(Menu menu)
+    {
+        dbContext.Menus.Add(menu);
+        dbContext.SaveChanges();
+    }
+
+    public void Update(Menu menu)
+    {
+        dbContext.Menus.Update(menu);
+        dbContext.SaveChanges();
+    }
+
+    public void Delete(int id)
+    {
+        var menuToDelete = dbContext.Menus.Find(id);
+        if (menuToDelete != null)
+        {
+            dbContext.Menus.Remove(menuToDelete);
+            dbContext.SaveChanges();
+        }
+    }
+}
+```
+Esta clase implementa la interfaz IMenuRepository y utiliza Entity Framework para interactuar con la base de datos. Cada método realiza las operaciones correspondientes.
+
+GetById utiliza el método Find de Entity Framework para obtener un menú por su identificador.
+GetAll utiliza ToList para obtener todos los menús.
+Add agrega un menú, Update actualiza un menú y Delete elimina un menú. Después de realizar estas operaciones, llamamos a SaveChanges para persistir los cambios en la base de datos.
+3. Uso en el Servicio del Restaurante (RestaurantService):
+
+```csharp
+Copy code
+public class RestaurantService
+{
+    private readonly IMenuRepository menuRepository;
+
+    public RestaurantService(IMenuRepository menuRepository)
+    {
+        this.menuRepository = menuRepository;
+    }
+
+    public void AddMenuItem(Menu menu)
+    {
+        menuRepository.Add(menu);
+    }
+
+    public Menu GetMenuItem(int id)
+    {
+        return menuRepository.GetById(id);
+    }
+
+    public IEnumerable<Menu> GetAllMenuItems()
+    {
+        return menuRepository.GetAll();
+    }
+
+    public void UpdateMenuItem(Menu menu)
+    {
+        menuRepository.Update(menu);
+    }
+
+    public void DeleteMenuItem(int id)
+    {
+        menuRepository.Delete(id);
+    }
+}
+```
+En este servicio (RestaurantService), utilizamos la interfaz IMenuRepository. Esto significa que el servicio no sabe cómo se implementan realmente las operaciones CRUD. Solo sabe que puede agregar, obtener, actualizar y eliminar menús utilizando el repositorio. Esto facilita la sustitución de MenuRepository por otra implementación si es necesario, por ejemplo, una implementación de prueba para pruebas unitarias.
+
+La separación de responsabilidades entre el servicio del restaurante y el repositorio permite un código más modular y mantenible. Además, el servicio no necesita preocuparse por los detalles de acceso a datos, lo que mejora la legibilidad y facilita las pruebas unitarias.
+
+
+### Cambiando el método post para utilizar el repository pattern 
+
+1. Creamos una carpeta "*Repositories*" dentro del proyecto
+1. Creamos dos carpetas dentro *Interfaces* y *Implementations*
+1. Dentro cremos las clases tipo "interface" **ICategoryRepository.cs**
+
+```csharp
+using CodePulse_API.Models.Domain;
+
+namespace CodePulse_API.Repositories.Interface
+{
+    public interface ICategoryRepository
+    {
+        Task<Category> CreateAsync(Category category);
+    }
+}
+
+```
+
+1. ahora implementamos la interface en **CategoryRepository**
+
+```csharp
+using CodePulse_API.Data;
+using CodePulse_API.Models.Domain;
+using CodePulse_API.Repositories.Interface;
+
+namespace CodePulse_API.Repositories.Implementation
+{
+    public class CategoryRepository : ICategoryRepository
+    {
+        private readonly ApplicationDbContext dbContext;
+
+        public CategoryRepository(ApplicationDbContext dbContext)
+        {
+            this.dbContext = dbContext;
+        }
+        public async Task<Category> CreateAsync(Category category)
+        {
+            await dbContext.Categories.AddAsync(category);
+            await dbContext.SaveChangesAsync();
+
+            return category; 
+        }
+    }
+}
+
+```
+
+* Ahora bien, recordamos que el createAsync para poder implementarlo vaamos a tener que inyectarlo en las dependecias, por eso debemos ir a **Program.cs** y colocarlo,
+
+```csharp
+using CodePulse_API.Data;
+using CodePulse_API.Repositories.Interface;
+using Microsoft.EntityFrameworkCore;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container.
+
+builder.Services.AddControllers();
+// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("CodePulseConnectionString")));
+// aca esta
+builder.Services.AddScoped<ICategoryRepository, ICategoryRepository>();
+
+var app = builder.Build();
+
+// (...)
+```
+
+
+* En ASP.NET Core, el método AddScoped se utiliza para registrar servicios con un ciclo de vida de ámbito. Esto significa que se crea una única instancia del servicio por cada solicitud HTTP, y esa instancia se reutiliza durante toda la duración de la solicitud. Cuando la solicitud finaliza, la instancia se elimina.
+
+* En el contexto de la inyección de dependencias y las interfaces, el uso de AddScoped para registrar una interfaz y su implementación significa que, durante el procesamiento de una solicitud HTTP, cada vez que se solicite una instancia de la interfaz (**ICategoryRepository**, en este caso), ASP.NET Core proporcionará la misma instancia para todas las dependencias que requieran esa interfaz dentro del ámbito de la solicitud.
+
+* En tu código:
+
+```csharp
+builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
+```
+    **ICategoryRepository**: Es la interfaz que se está registrando.
+
+    **CategoryRepository**: Es la implementación concreta de esa interfaz (podría ser el nombre de una clase que implementa ICategoryRepository).
+
+bien ahora para poder utilizarlo ya que lo tenemos inyectado, nos vamos al controlador y reemplazamos el uso de la dbcontext class
